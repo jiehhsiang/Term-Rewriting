@@ -25,7 +25,7 @@ of why the algorithm couldn't finish.
 | `index.html` | The whole interface — UI, embedded Python sources, Pyodide loader. Nothing else is required at runtime. |
 | `knuth_bendix.py` | Standalone reference implementation: Robinson unification, LPO with lexicographic status, Huet-style completion. |
 | `ac_knuth_bendix.py` | AC variant: AC matching, enumerative AC unification, extension rules, AC-compatible RPO with multiset status under AC heads. |
-| `unfailing_knuth_bendix.py` | Unfailing (ordered) completion à la Bachmair-Dershowitz-Plaisted: keeps unorientable equations and uses them by ordered rewriting (strictly decreasing instances only). Output is `(rules, equations)`. |
+| `unfailing_knuth_bendix.py` | Unfailing (ordered) completion à la Bachmair-Dershowitz-Plaisted/Hsiang-Rusinowitch: keeps unorientable equations and uses them by ordered rewriting (strictly decreasing instances only). Output is `(rules, equations)`. |
 | `.claude/launch.json` | Optional — config used by Claude Code's preview panel to serve the page on `localhost:8765`. |
 
 The two `.py` files are inlined into `index.html`; you only need them if you
