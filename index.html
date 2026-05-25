@@ -84,6 +84,17 @@
       critical pairs use <em>AC unification</em>; and for every AC-rooted rule an
       <em>extension rule</em> <code>f(l, X) → f(r, X)</code> is added so overlaps at
       non-root positions aren&rsquo;t missed.</li>
+    <li><strong>Unfailing Knuth-Bendix</strong> — introduced independently in the
+      late 1980s by <em>Bachmair, Dershowitz &amp; Plaisted</em>
+      (&ldquo;Completion without failure&rdquo;, 1989) and by
+      <em>Hsiang &amp; Rusinowitch</em> (ICALP 1987; JACM 1991). It never fails
+      with &ldquo;cannot orient&rdquo;: equations the precedence can&rsquo;t orient
+      are kept as unoriented pairs alongside the rules and used by
+      <em>ordered rewriting</em> — only on instances where one side is strictly
+      decreasing in the RPO. The output is a pair (rules, equations); when the
+      equation list is empty the result is fully confluent, otherwise it is
+      <em>ground-confluent</em> (every two equal ground terms have a common normal
+      form, even if confluence on open terms doesn&rsquo;t hold).</li>
   </ul>
 
   <h3>Orderings (termination proofs)</h3>
@@ -118,10 +129,11 @@
       If not, it can fail with &ldquo;cannot orient&rdquo; or simply never saturate. Hitting
       the iteration limit does <em>not</em> prove no finite system exists — a different
       precedence may succeed.</li>
-    <li><strong>Orientation must always succeed.</strong> RPO is silent on equations like
-      commutativity <code>f(x, y) = f(y, x)</code> where both sides have the same head and
-      identical multisets of variables. Such equations can only be handled by declaring
-      <code>f</code> as AC and switching to AC mode.</li>
+    <li><strong>Orientation must always succeed</strong> in standard and AC modes.
+      RPO is silent on equations like commutativity <code>f(x, y) = f(y, x)</code>
+      where both sides have the same head and identical multisets of variables.
+      Such equations can only be handled by declaring <code>f</code> as AC, or
+      by switching to <em>Unfailing</em> mode (which keeps them as unorientable equations).</li>
     <li><strong>AC unification here is enumerative</strong> and assumes every variable
       binds to a non-empty term — empty bindings (a unit element being absorbed into an AC
       operator) are not supported. Don&rsquo;t expect Boolean rings or anything that needs
@@ -152,7 +164,7 @@
       <tr>
         <td><code>Cannot orient: s = t</code></td>
         <td>RPO can&rsquo;t decide which side is bigger under the current precedence.</td>
-        <td>Reorder the precedence so the head symbol of the side you want as the LHS comes <em>earlier</em>. If both heads are equal and the argument multisets coincide (e.g. commutativity), the equation is genuinely unorientable — declare the head AC and switch to AC mode.</td>
+        <td>Reorder the precedence so the head symbol of the side you want as the LHS comes <em>earlier</em>. If both heads are equal and the argument multisets coincide (e.g. commutativity), the equation is genuinely unorientable — declare the head AC and switch to AC mode, or switch to <em>Unfailing</em> mode to keep it as an equation.</td>
       </tr>
       <tr>
         <td><code>did not saturate in N iterations</code></td>
@@ -178,6 +190,7 @@
   <div class="controls">
     <label class="inline"><input type="radio" name="algo" value="std" checked> Standard Knuth-Bendix</label>
     <label class="inline"><input type="radio" name="algo" value="ac"> AC Knuth-Bendix</label>
+    <label class="inline"><input type="radio" name="algo" value="unfail"> Unfailing Knuth-Bendix</label>
   </div>
 </fieldset>
 
@@ -187,6 +200,7 @@
     <button type="button" data-preset="group">Free group</button>
     <button type="button" data-preset="abelian">Abelian group (AC)</button>
     <button type="button" data-preset="idempotent">Idempotent AC</button>
+    <button type="button" data-preset="cmonoid">Comm. monoid (unfailing)</button>
     <button type="button" data-preset="clear">Clear</button>
   </div>
   <textarea id="equations" spellcheck="false" placeholder="m(e, x) = x"></textarea>
@@ -1130,6 +1144,384 @@ def parse(s: str):
     return t
 </script>
 
+<script type="text/x-python" id="src-unfail">
+"""Unfailing (ordered) Knuth-Bendix completion.
+
+Independently introduced in the late 1980s by Bachmair-Dershowitz-Plaisted
+("Completion without failure", 1989) and Hsiang-Rusinowitch ("On word
+problems in equational theories", ICALP 1987 / JACM 1991). Equations that
+can't be oriented under the supplied precedence are kept as unoriented
+pairs and used for rewriting only on instances that are strictly decreasing
+in the RPO/LPO order. The output is a pair (rules, eqs); if eqs is
+non-empty, the result is ground-confluent rather than confluent.
+"""
+
+from dataclasses import dataclass
+from typing import Optional, Callable, Iterable, List, Tuple
+
+
+@dataclass(frozen=True)
+class Var:
+    name: str
+    def __repr__(self) -> str:
+        return self.name
+
+
+@dataclass(frozen=True)
+class App:
+    op: str
+    args: tuple
+    def __repr__(self) -> str:
+        if not self.args:
+            return self.op
+        return f"{self.op}({','.join(map(repr, self.args))})"
+
+
+def apply_sub(t, sub: dict):
+    if isinstance(t, Var):
+        return apply_sub(sub[t], sub) if t in sub else t
+    return App(t.op, tuple(apply_sub(a, sub) for a in t.args))
+
+
+def occurs(x: Var, t, sub: dict) -> bool:
+    t = apply_sub(t, sub)
+    if isinstance(t, Var):
+        return t == x
+    return any(occurs(x, a, sub) for a in t.args)
+
+
+def unify(s, t, sub: Optional[dict] = None) -> Optional[dict]:
+    if sub is None:
+        sub = {}
+    s = apply_sub(s, sub)
+    t = apply_sub(t, sub)
+    if isinstance(s, Var):
+        if s == t:
+            return sub
+        if occurs(s, t, sub):
+            return None
+        out = dict(sub); out[s] = t
+        return out
+    if isinstance(t, Var):
+        if occurs(t, s, sub):
+            return None
+        out = dict(sub); out[t] = s
+        return out
+    if s.op != t.op or len(s.args) != len(t.args):
+        return None
+    for a, b in zip(s.args, t.args):
+        sub = unify(a, b, sub)
+        if sub is None:
+            return None
+    return sub
+
+
+def match(pat, term, sub: Optional[dict] = None) -> Optional[dict]:
+    if sub is None:
+        sub = {}
+    if isinstance(pat, Var):
+        if pat in sub:
+            return sub if sub[pat] == term else None
+        out = dict(sub); out[pat] = term
+        return out
+    if isinstance(term, Var):
+        return None
+    if pat.op != term.op or len(pat.args) != len(term.args):
+        return None
+    for p, t in zip(pat.args, term.args):
+        sub = match(p, t, sub)
+        if sub is None:
+            return None
+    return sub
+
+
+_counter = [0]
+
+def _fresh() -> str:
+    _counter[0] += 1
+    return f"_u{_counter[0]}"
+
+
+def _rename(t, mapping: dict):
+    if isinstance(t, Var):
+        if t not in mapping:
+            mapping[t] = Var(_fresh())
+        return mapping[t]
+    return App(t.op, tuple(_rename(a, mapping) for a in t.args))
+
+
+def freshen(lhs, rhs):
+    mapping: dict = {}
+    return _rename(lhs, mapping), _rename(rhs, mapping)
+
+
+def positions(t):
+    yield ()
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            for p in positions(a):
+                yield (i,) + p
+
+
+def at_pos(t, pos):
+    for i in pos:
+        t = t.args[i]
+    return t
+
+
+def replace_at(t, pos, new):
+    if not pos:
+        return new
+    i = pos[0]
+    return App(t.op, t.args[:i] + (replace_at(t.args[i], pos[1:], new),) + t.args[i+1:])
+
+
+def _vars(t):
+    if isinstance(t, Var):
+        return {t}
+    out = set()
+    for a in t.args:
+        out |= _vars(a)
+    return out
+
+
+Prec = Callable[[str, str], int]
+
+
+def rpo_gt(s, t, prec: Prec) -> bool:
+    if isinstance(t, Var):
+        return isinstance(s, App) and t in _vars(s) and s != t
+    if isinstance(s, Var):
+        return False
+    for si in s.args:
+        if si == t or rpo_gt(si, t, prec):
+            return True
+    cmp = prec(s.op, t.op)
+    if cmp > 0:
+        return all(rpo_gt(s, tj, prec) for tj in t.args)
+    if cmp == 0 and len(s.args) == len(t.args):
+        for a, b in zip(s.args, t.args):
+            if a == b:
+                continue
+            if rpo_gt(a, b, prec):
+                return all(rpo_gt(s, tj, prec) for tj in t.args)
+            return False
+        return False
+    return False
+
+
+def _try_rule(t, lhs, rhs):
+    l2, r2 = freshen(lhs, rhs)
+    sub = match(l2, t)
+    if sub is None:
+        return None
+    return apply_sub(r2, sub)
+
+
+def _try_eq(t, a, b, prec):
+    for lhs, rhs in ((a, b), (b, a)):
+        l2, r2 = freshen(lhs, rhs)
+        sub = match(l2, t)
+        if sub is None:
+            continue
+        l_inst = apply_sub(l2, sub)
+        r_inst = apply_sub(r2, sub)
+        if rpo_gt(l_inst, r_inst, prec):
+            return r_inst
+    return None
+
+
+def ordered_rewrite_once(t, rules, eqs, prec):
+    for (lhs, rhs) in rules:
+        out = _try_rule(t, lhs, rhs)
+        if out is not None:
+            return out
+    for (a, b) in eqs:
+        out = _try_eq(t, a, b, prec)
+        if out is not None:
+            return out
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            na = ordered_rewrite_once(a, rules, eqs, prec)
+            if na is not None:
+                return App(t.op, t.args[:i] + (na,) + t.args[i+1:])
+    return None
+
+
+def ordered_normalize(t, rules, eqs, prec):
+    while True:
+        nt = ordered_rewrite_once(t, rules, eqs, prec)
+        if nt is None:
+            return t
+        t = nt
+
+
+def _ordered_reducible(t, rules, eqs, prec) -> bool:
+    for pos in positions(t):
+        u = at_pos(t, pos)
+        for (lhs, rhs) in rules:
+            l2, _ = freshen(lhs, rhs)
+            if match(l2, u) is not None:
+                return True
+        for (a, b) in eqs:
+            for lhs, rhs in ((a, b), (b, a)):
+                l2, r2 = freshen(lhs, rhs)
+                sub = match(l2, u)
+                if sub is None:
+                    continue
+                if rpo_gt(apply_sub(l2, sub), apply_sub(r2, sub), prec):
+                    return True
+    return False
+
+
+def _ordered_cps(item1, item2, item1_is_eq: bool, item2_is_eq: bool,
+                 same: bool, prec):
+    dirs1 = ((item1[0], item1[1]), (item1[1], item1[0])) if item1_is_eq else ((item1[0], item1[1]),)
+    dirs2 = ((item2[0], item2[1]), (item2[1], item2[0])) if item2_is_eq else ((item2[0], item2[1]),)
+    out = []
+    for i1, d1 in enumerate(dirs1):
+        for i2, d2 in enumerate(dirs2):
+            l1, r1 = freshen(*d1)
+            l2, r2 = freshen(*d2)
+            for pos in positions(l1):
+                u = at_pos(l1, pos)
+                if isinstance(u, Var):
+                    continue
+                if same and pos == () and i1 == i2:
+                    continue
+                sub = unify(u, l2)
+                if sub is None:
+                    continue
+                if item1_is_eq:
+                    if not rpo_gt(apply_sub(l1, sub), apply_sub(r1, sub), prec):
+                        continue
+                if item2_is_eq:
+                    if not rpo_gt(apply_sub(l2, sub), apply_sub(r2, sub), prec):
+                        continue
+                s = apply_sub(replace_at(l1, pos, r2), sub)
+                t = apply_sub(r1, sub)
+                if s != t:
+                    out.append((s, t))
+    return out
+
+
+def unfailing_complete(
+    equations: Iterable[Tuple],
+    prec: Prec,
+    max_iters: int = 10000,
+    verbose: bool = False,
+) -> Tuple[List[Tuple], List[Tuple]]:
+    rules: List[Tuple] = []
+    eqs: List[Tuple] = []
+    pending: List[Tuple] = list(equations)
+
+    for it in range(max_iters):
+        if not pending:
+            return rules, eqs
+
+        s, t = pending.pop(0)
+        s = ordered_normalize(s, rules, eqs, prec)
+        t = ordered_normalize(t, rules, eqs, prec)
+        if s == t:
+            continue
+
+        if rpo_gt(s, t, prec):
+            new, new_is_rule = (s, t), True
+        elif rpo_gt(t, s, prec):
+            new, new_is_rule = (t, s), True
+        else:
+            new, new_is_rule = (s, t), False
+
+        new_rules = [new] if new_is_rule else []
+        new_eqs = [] if new_is_rule else [new]
+
+        kept_rules: List[Tuple] = []
+        for (l, r) in rules:
+            if _ordered_reducible(l, new_rules, new_eqs, prec):
+                pending.append((ordered_normalize(l, new_rules, new_eqs, prec),
+                                ordered_normalize(r, new_rules, new_eqs, prec)))
+            else:
+                kept_rules.append((l, ordered_normalize(r, new_rules, new_eqs, prec)))
+        rules = kept_rules
+
+        kept_eqs: List[Tuple] = []
+        for (a, b) in eqs:
+            a2 = ordered_normalize(a, new_rules, new_eqs, prec)
+            b2 = ordered_normalize(b, new_rules, new_eqs, prec)
+            if a2 == b2:
+                continue
+            if (a2, b2) == (a, b):
+                kept_eqs.append((a, b))
+            else:
+                pending.append((a2, b2))
+        eqs = kept_eqs
+
+        if new_is_rule:
+            rules.append(new)
+        else:
+            eqs.append(new)
+
+        for r in rules:
+            for cp in _ordered_cps(new, r, not new_is_rule, False,
+                                   same=(new is r), prec=prec):
+                pending.append(cp)
+            if r is not new:
+                for cp in _ordered_cps(r, new, False, not new_is_rule,
+                                       same=False, prec=prec):
+                    pending.append(cp)
+        for e in eqs:
+            for cp in _ordered_cps(new, e, not new_is_rule, True,
+                                   same=(new is e), prec=prec):
+                pending.append(cp)
+            if e is not new:
+                for cp in _ordered_cps(e, new, True, not new_is_rule,
+                                       same=False, prec=prec):
+                    pending.append(cp)
+
+    raise RuntimeError(
+        f"did not saturate in {max_iters} iterations; "
+        f"{len(rules)} rule(s), {len(eqs)} equation(s), "
+        f"{len(pending)} pending"
+    )
+
+
+VAR_LETTERS = set('uvwxyz')
+
+
+def parse(s: str):
+    s = s.replace(' ', '')
+    pos = [0]
+    def peek(): return s[pos[0]] if pos[0] < len(s) else ''
+    def consume(c=None):
+        ch = s[pos[0]]
+        if c is not None and ch != c:
+            raise SyntaxError(f"expected {c!r} at {pos[0]} in {s!r}")
+        pos[0] += 1
+        return ch
+    def name():
+        start = pos[0]
+        while pos[0] < len(s) and (s[pos[0]].isalnum() or s[pos[0]] == '_'):
+            pos[0] += 1
+        if start == pos[0]:
+            raise SyntaxError(f"expected name at {pos[0]} in {s!r}")
+        return s[start:pos[0]]
+    def term():
+        n = name()
+        if peek() == '(':
+            consume('(')
+            args = [term()]
+            while peek() == ',':
+                consume(',')
+                args.append(term())
+            consume(')')
+            return App(n, tuple(args))
+        return Var(n) if n[0] in VAR_LETTERS else App(n, ())
+    t = term()
+    if pos[0] != len(s):
+        raise SyntaxError(f"trailing input at {pos[0]} in {s!r}")
+    return t
+</script>
+
 <script type="text/x-python" id="src-driver">
 import sys
 sys.setrecursionlimit(50000)
@@ -1137,6 +1529,8 @@ sys.setrecursionlimit(50000)
 def run_completion(eq_text, ac_text, prec_text, algorithm, max_iters):
     if algorithm == 'ac':
         import ac_knuth_bendix as mod
+    elif algorithm == 'unfail':
+        import unfailing_knuth_bendix as mod
     else:
         import knuth_bendix as mod
 
@@ -1171,14 +1565,18 @@ def run_completion(eq_text, ac_text, prec_text, algorithm, max_iters):
 
     if algorithm != 'ac' and ac_ops:
         return {'ok': False, 'kind': 'input',
-                'message': ('Standard Knuth-Bendix does not handle AC operators. '
+                'message': ('This algorithm does not handle AC operators. '
                             'Either clear the AC operator list, or switch to AC mode.')}
 
     try:
         if algorithm == 'ac':
             rules = mod.ac_complete(eqs, prec, ac_ops, max_iters=int(max_iters))
+            extra_eqs = []
+        elif algorithm == 'unfail':
+            rules, extra_eqs = mod.unfailing_complete(eqs, prec, max_iters=int(max_iters))
         else:
             rules = mod.complete(eqs, prec, max_iters=int(max_iters))
+            extra_eqs = []
     except ValueError as e:
         return {'ok': False, 'kind': 'orient', 'message': str(e)}
     except RuntimeError as e:
@@ -1189,7 +1587,10 @@ def run_completion(eq_text, ac_text, prec_text, algorithm, max_iters):
         return {'ok': False, 'kind': 'internal',
                 'message': f'{type(e).__name__}: {e}'}
 
-    return {'ok': True, 'rules': [(repr(l), repr(r)) for l, r in rules]}
+    return {'ok': True,
+            'rules': [(repr(l), repr(r)) for l, r in rules],
+            'eqs':   [(repr(l), repr(r)) for l, r in extra_eqs],
+            'algorithm': algorithm}
 </script>
 
 <script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
@@ -1214,6 +1615,12 @@ const PRESETS = {
     equations: 'p(x, x) = x',
     ac: 'p',
     prec: 'p',
+  },
+  cmonoid: {
+    algo: 'unfail',
+    equations: 'm(e, x) = x\nm(x, y) = m(y, x)\nm(m(x, y), z) = m(x, m(y, z))',
+    ac: '',
+    prec: 'm, e',
   },
   clear: { algo: 'std', equations: '', ac: '', prec: '' },
 };
@@ -1254,6 +1661,8 @@ async function ensurePyodide() {
       document.getElementById('src-kb').textContent);
     py.FS.writeFile('ac_knuth_bendix.py',
       document.getElementById('src-ackb').textContent);
+    py.FS.writeFile('unfailing_knuth_bendix.py',
+      document.getElementById('src-unfail').textContent);
     await py.runPythonAsync(document.getElementById('src-driver').textContent);
     return py;
   })();
@@ -1280,17 +1689,47 @@ ensurePyodide().catch(function (e) {
 function renderResult(res, ctx) {
   const out = document.getElementById('output');
   if (res.ok) {
-    const items = res.rules.map(function (pair) {
+    const eqs = res.eqs || [];
+    const isUnfailing = res.algorithm === 'unfail';
+    const rulesHtml = res.rules.map(function (pair) {
       return '<li>' + escapeHtml(pair[0]) + '  →  ' + escapeHtml(pair[1]) + '</li>';
     }).join('');
-    out.innerHTML =
-      '<div class="ok">' +
-      '<strong>Confluent rewrite system (' + res.rules.length +
-      ' rule' + (res.rules.length === 1 ? '' : 's') + ').</strong>' +
-      (res.rules.length === 0
-        ? '<p class="hint">No rules were generated. (Every supplied equation reduced to a trivial identity.)</p>'
-        : '<ol class="rules">' + items + '</ol>') +
-      '</div>';
+    const eqsHtml = eqs.map(function (pair) {
+      return '<li>' + escapeHtml(pair[0]) + '  =  ' + escapeHtml(pair[1]) + '</li>';
+    }).join('');
+    let header;
+    if (isUnfailing) {
+      if (eqs.length === 0) {
+        header = '<strong>Confluent rewrite system (' + res.rules.length +
+                 ' rule' + (res.rules.length === 1 ? '' : 's') +
+                 '; no unorientable equations needed).</strong>';
+      } else {
+        header = '<strong>Ground-confluent system: ' + res.rules.length +
+                 ' rule' + (res.rules.length === 1 ? '' : 's') + ' and ' +
+                 eqs.length + ' unorientable equation' +
+                 (eqs.length === 1 ? '' : 's') + '.</strong>' +
+                 '<div class="hint">The equations could not be turned into rules under the supplied precedence. ' +
+                 'They are used by ordered rewriting only on instances that are strictly decreasing in the RPO, ' +
+                 'which is enough to give ground-confluence — every two equal ground terms have a common normal form.</div>';
+      }
+    } else {
+      header = '<strong>Confluent rewrite system (' + res.rules.length +
+               ' rule' + (res.rules.length === 1 ? '' : 's') + ').</strong>';
+    }
+    let body = '';
+    if (res.rules.length === 0 && eqs.length === 0) {
+      body = '<p class="hint">No rules or equations were generated. (Every supplied equation reduced to a trivial identity.)</p>';
+    } else {
+      if (rulesHtml) {
+        body += (isUnfailing && eqs.length ? '<p class="small" style="margin:0.6rem 0 0.2rem"><strong>Rules</strong></p>' : '') +
+                '<ol class="rules">' + rulesHtml + '</ol>';
+      }
+      if (eqsHtml) {
+        body += '<p class="small" style="margin:0.6rem 0 0.2rem"><strong>Unorientable equations</strong></p>' +
+                '<ol class="rules">' + eqsHtml + '</ol>';
+      }
+    }
+    out.innerHTML = '<div class="ok">' + header + body + '</div>';
     return;
   }
   let title, hint = '';
@@ -1310,7 +1749,10 @@ function renderResult(res, ctx) {
              escapeHtml(ctx.prec || '(empty)') + '</code> cannot decide which side of this equation is bigger, ' +
              'so neither side can become the left-hand side of a rewrite rule. ' +
              'Adjust the precedence so the head symbol of the intended left-hand side comes <em>earlier</em> in the list. ' +
-             'If both sides have the same head, RPO falls back to comparing arguments — in that case the equation may not be orientable at all and the theory needs to be presented differently.';
+             'If the two sides genuinely cannot be oriented (e.g. <code>f(x, y) = f(y, x)</code>), switch to ' +
+             '<strong>Unfailing Knuth-Bendix</strong> (Bachmair-Dershowitz-Plaisted / Hsiang-Rusinowitch), ' +
+             'which keeps such equations as unorientable pairs and still produces a ground-confluent system, ' +
+             'or declare the operator AC and use AC mode.';
       break;
     case 'saturate':
       title = 'Algorithm failed: ran out of iterations.';
