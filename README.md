@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/28204064/README.md)
 # Knuth-Bendix Completion (Web Interface)
 
 A single self-contained HTML page that runs Knuth-Bendix completion entirely
@@ -26,6 +25,7 @@ of why the algorithm couldn't finish.
 | `index.html` | The whole interface — UI, embedded Python sources, Pyodide loader. Nothing else is required at runtime. |
 | `knuth_bendix.py` | Standalone reference implementation: Robinson unification, LPO with lexicographic status, Huet-style completion. |
 | `ac_knuth_bendix.py` | AC variant: AC matching, enumerative AC unification, extension rules, AC-compatible RPO with multiset status under AC heads. |
+| `unfailing_knuth_bendix.py` | Unfailing (ordered) completion à la Bachmair-Dershowitz-Plaisted: keeps unorientable equations and uses them by ordered rewriting (strictly decreasing instances only). Output is `(rules, equations)`. |
 | `.claude/launch.json` | Optional — config used by Claude Code's preview panel to serve the page on `localhost:8765`. |
 
 The two `.py` files are inlined into `index.html`; you only need them if you
@@ -62,6 +62,15 @@ precedence:
   flattened and canonically sorted; rewriting uses AC matching; critical
   pairs use AC unification; for every AC-rooted rule an extension rule
   `f(l, X) → f(r, X)` is added to catch overlaps below the root.
+- **Unfailing KB** — independently introduced by Bachmair, Dershowitz &
+  Plaisted ("Completion without failure", 1989) and by Hsiang & Rusinowitch
+  ("On word problems in equational theories", ICALP 1987 / JACM 1991).
+  Same LPO, but equations the precedence can't orient are kept as
+  unoriented pairs. Rewriting with an equation `l = r` is only allowed when
+  the matched instance `σ(l)` is strictly greater than `σ(r)`. The output
+  is `(rules, equations)`; if the equation list is empty the system is
+  fully confluent, otherwise it is **ground-confluent** — every pair of
+  equal *ground* terms still has a common normal form.
 
 ## Limitations
 
@@ -69,7 +78,8 @@ precedence:
   the precedence orients every generated equation, the procedure finds it.
   Otherwise it fails with "cannot orient" or never saturates.
 - RPO is silent on equations like `f(x, y) = f(y, x)`. Those can only be
-  handled by declaring `f` AC and switching modes.
+  handled by declaring `f` AC and switching to AC mode, or by switching to
+  Unfailing mode (which keeps them as unorientable equations).
 - AC unification here is **enumerative** and assumes every variable binds
   to a **non-empty** term — unit elements absorbed into AC operators are
   not supported.
@@ -81,7 +91,7 @@ precedence:
 
 | Message | Meaning | What to try |
 | --- | --- | --- |
-| `Cannot orient: s = t` | RPO can't compare the two sides. | Reorder the precedence so the intended LHS's head symbol comes earlier; if both heads coincide on the same argument multiset, declare it AC. |
+| `Cannot orient: s = t` | RPO can't compare the two sides. | Reorder the precedence so the intended LHS's head symbol comes earlier; if both heads coincide on the same argument multiset, declare it AC, or switch to *Unfailing* mode (keeps the equation as-is). |
 | `did not saturate in N iterations` | Critical pairs kept coming. | Raise *Max iterations*. If still failing, try a different precedence — the theory may have no finite confluent presentation. |
 | parse error | Bad syntax. | One `=` per non-blank line; check parens. |
 | recursion-limit error | A generated term blew Python's stack. | Usually a divergent system — try a coarser precedence or fewer iterations. |
