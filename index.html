@@ -1,0 +1,1379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knuth-Bendix Completion</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root { color-scheme: light dark; --mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 980px; margin: 1.5rem auto; padding: 0 1rem 2rem; line-height: 1.45; }
+  h1 { margin: 0 0 0.3rem; font-size: 1.4rem; }
+  p.lede { margin-top: 0.2rem; }
+  fieldset { border: 1px solid #c8c8c8; border-radius: 6px; margin: 0 0 1rem; padding: 0.6rem 1rem 0.9rem; }
+  legend { padding: 0 0.3rem; font-weight: 600; }
+  label { display: block; font-size: 0.92rem; margin: 0.4rem 0 0.2rem; }
+  label.inline { display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 1rem; font-size: 0.95rem; }
+  textarea, input[type=text], input[type=number], select {
+    width: 100%; box-sizing: border-box;
+    font-family: var(--mono); font-size: 0.92rem;
+    padding: 0.4rem; border: 1px solid #b4b4b4; border-radius: 4px;
+    background: Canvas; color: CanvasText;
+  }
+  textarea { min-height: 8rem; resize: vertical; }
+  .row3 { display: grid; grid-template-columns: 1fr 1fr 8rem; gap: 0.4rem 1rem; }
+  @media (max-width: 640px) { .row3 { grid-template-columns: 1fr; } }
+  .controls { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+  button { padding: 0.5rem 1rem; font-size: 0.95rem; border-radius: 6px; border: 1px solid #888; background: ButtonFace; color: ButtonText; cursor: pointer; }
+  button:disabled { opacity: 0.55; cursor: progress; }
+  button.primary { background: #1f6feb; color: white; border-color: #1f6feb; }
+  button.primary:disabled { background: #6a8cc8; border-color: #6a8cc8; }
+  #status { font-size: 0.85rem; opacity: 0.85; }
+  #output { margin-top: 1rem; }
+  #output .ok, #output .err { padding: 0.7rem 0.9rem; border-radius: 6px; }
+  #output .ok { background: rgba(0,160,80,0.08); border: 1px solid rgba(0,160,80,0.45); }
+  #output .err { background: rgba(200,40,40,0.08); border: 1px solid rgba(200,40,40,0.45); }
+  #output .hint { font-size: 0.88rem; opacity: 0.9; margin-top: 0.45rem; }
+  #output pre { margin: 0.3rem 0 0; font-family: var(--mono); font-size: 0.9rem; white-space: pre-wrap; word-break: break-word; }
+  ol.rules { font-family: var(--mono); font-size: 0.92rem; padding-left: 2.2rem; margin: 0.4rem 0 0; }
+  ol.rules li { margin: 0.15rem 0; }
+  .preset-bar { display: flex; gap: 0.4rem; flex-wrap: wrap; margin: 0.2rem 0 0.6rem; }
+  .preset-bar button { font-size: 0.82rem; padding: 0.25rem 0.6rem; }
+  .small { font-size: 0.85rem; opacity: 0.85; }
+  code { font-family: var(--mono); background: rgba(127,127,127,0.15); padding: 0 0.25rem; border-radius: 3px; }
+  details.about { border: 1px solid #c8c8c8; border-radius: 6px; padding: 0.4rem 0.9rem; margin: 0 0 1rem; background: rgba(127,127,127,0.04); }
+  details.about > summary { font-weight: 600; cursor: pointer; padding: 0.2rem 0; outline: none; }
+  details.about[open] > summary { margin-bottom: 0.4rem; border-bottom: 1px solid rgba(127,127,127,0.25); padding-bottom: 0.4rem; }
+  details.about h3 { font-size: 1rem; margin: 0.9rem 0 0.3rem; }
+  details.about p, details.about ul { margin: 0.35rem 0; }
+  details.about ul { padding-left: 1.4rem; }
+  details.about li { margin: 0.15rem 0; }
+  details.about table { border-collapse: collapse; width: 100%; font-size: 0.88rem; margin-top: 0.3rem; }
+  details.about th, details.about td { border: 1px solid rgba(127,127,127,0.4); padding: 0.35rem 0.5rem; text-align: left; vertical-align: top; }
+  details.about th { background: rgba(127,127,127,0.12); font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Knuth-Bendix Completion</h1>
+<p class="lede small">
+  Enter equations <code>lhs = rhs</code>, one per line.
+  Identifiers starting with <code>u v w x y z</code> are variables; everything else is a function symbol or constant.
+  <code>#</code> starts a line comment.
+</p>
+
+<details class="about">
+  <summary>About these algorithms — orderings, limitations, syntax</summary>
+
+  <p>
+    <strong>Knuth-Bendix completion</strong> turns a set of equations into a confluent
+    rewrite system: every term reduces to a unique normal form, so equality in the
+    equational theory becomes a syntactic check. This page runs two implementations
+    entirely in your browser (Python via Pyodide).
+  </p>
+
+  <h3>What each algorithm does</h3>
+  <ul>
+    <li><strong>Standard Knuth-Bendix</strong> treats every function symbol as uninterpreted.
+      It uses Huet-style completion: orient each equation into a rule, simplify existing
+      rules with the new one (compose / collapse), then add every <em>critical pair</em>
+      (overlap between rule LHSs) as a fresh equation.</li>
+    <li><strong>AC Knuth-Bendix</strong> lets you declare function symbols as
+      <em>associative and commutative</em> — e.g. addition, multiplication, set union.
+      AC subterms are flattened and canonically sorted (so <code>p(a, b, c)</code> and
+      <code>p(c, p(a, b))</code> have identical Python representations). Rewriting uses
+      <em>AC matching</em> (a variable under an AC head may absorb a multiset of arguments);
+      critical pairs use <em>AC unification</em>; and for every AC-rooted rule an
+      <em>extension rule</em> <code>f(l, X) → f(r, X)</code> is added so overlaps at
+      non-root positions aren&rsquo;t missed.</li>
+  </ul>
+
+  <h3>Orderings (termination proofs)</h3>
+  <p>
+    Both algorithms orient equations using a <strong>recursive path ordering (RPO)</strong>
+    parameterised by a precedence on function symbols.
+  </p>
+  <ul>
+    <li><strong>Standard mode — LPO (lexicographic status for every symbol).</strong>
+      <code>s = f(s₁,…,sₘ) ≻ t</code> if any of:
+      <ul>
+        <li>some <code>sᵢ = t</code> or <code>sᵢ ≻ t</code>; or</li>
+        <li><code>f</code> outranks the head of <code>t</code>, and <code>s ≻ tⱼ</code> for every argument of <code>t</code>; or</li>
+        <li>heads are equal and the argument tuples are lex-greater (with <code>s ≻ tⱼ</code> for the remaining arguments).</li>
+      </ul>
+    </li>
+    <li><strong>AC mode — RPO with multiset status under AC heads.</strong>
+      Same scheme, but when the two heads are equal <em>and</em> the head is AC, comparison
+      reduces to multiset comparison of the (flattened) argument lists. This is required
+      because <code>f(a, b)</code> and <code>f(b, a)</code> must be ordered the same way.</li>
+  </ul>
+  <p class="small">
+    Precedence is supplied as a comma-separated list, highest first
+    (e.g. <code>i, m, e</code> means <code>i &gt; m &gt; e</code>). Any symbol you don&rsquo;t
+    list gets rank 0 and is considered equal to all other unlisted symbols.
+  </p>
+
+  <h3>Limitations</h3>
+  <ul>
+    <li><strong>Completion is semi-decidable.</strong> If a finite confluent system exists
+      <em>and</em> the precedence orients every generated equation, the procedure will find it.
+      If not, it can fail with &ldquo;cannot orient&rdquo; or simply never saturate. Hitting
+      the iteration limit does <em>not</em> prove no finite system exists — a different
+      precedence may succeed.</li>
+    <li><strong>Orientation must always succeed.</strong> RPO is silent on equations like
+      commutativity <code>f(x, y) = f(y, x)</code> where both sides have the same head and
+      identical multisets of variables. Such equations can only be handled by declaring
+      <code>f</code> as AC and switching to AC mode.</li>
+    <li><strong>AC unification here is enumerative</strong> and assumes every variable
+      binds to a non-empty term — empty bindings (a unit element being absorbed into an AC
+      operator) are not supported. Don&rsquo;t expect Boolean rings or anything that needs
+      to identify <code>f(x, e)</code> with <code>x</code> via the unifier.</li>
+    <li><strong>No conditional rules, no built-in equality predicate, no sorts.</strong>
+      Identifiers are just strings; there&rsquo;s no type or arity checking.</li>
+    <li><strong>Performance.</strong> AC unification is exponential in the worst case.
+      Realistic AC examples can blow up quickly; the iteration limit is the only brake.</li>
+  </ul>
+
+  <h3>Syntax cheatsheet</h3>
+  <ul>
+    <li>One equation per line: <code>lhs = rhs</code></li>
+    <li>Function application: <code>f(g(x), y, c)</code>. Constants are nullary
+      applications written without parens (<code>c</code>, <code>e</code>, <code>0</code>).</li>
+    <li>Variables: identifiers starting with <code>u v w x y z</code>
+      — so <code>xs</code>, <code>y1</code>, <code>zoo</code> are variables; <code>a</code>,
+      <code>b</code>, <code>e</code>, <code>f1</code> are constants/functions.</li>
+    <li>Comments: <code>#</code> to end of line.</li>
+    <li>AC operators: comma-separated symbol list (e.g. <code>p, plus</code>).</li>
+    <li>Precedence: comma-separated, <strong>highest first</strong>.</li>
+  </ul>
+
+  <h3>What to do when it fails</h3>
+  <table>
+    <thead><tr><th>Message</th><th>Meaning</th><th>What to try</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>Cannot orient: s = t</code></td>
+        <td>RPO can&rsquo;t decide which side is bigger under the current precedence.</td>
+        <td>Reorder the precedence so the head symbol of the side you want as the LHS comes <em>earlier</em>. If both heads are equal and the argument multisets coincide (e.g. commutativity), the equation is genuinely unorientable — declare the head AC and switch to AC mode.</td>
+      </tr>
+      <tr>
+        <td><code>did not saturate in N iterations</code></td>
+        <td>Critical pairs kept being generated past the iteration budget.</td>
+        <td>Raise &ldquo;Max iterations&rdquo;. If it still doesn&rsquo;t finish, try a different precedence; the theory may have no finite confluent presentation under any ordering this implementation supports.</td>
+      </tr>
+      <tr>
+        <td>parse error / missing <code>=</code></td>
+        <td>The input couldn&rsquo;t be parsed as <code>lhs = rhs</code>.</td>
+        <td>Each non-blank line must contain exactly one <code>=</code>; check parens balance and that variable letters match the convention above.</td>
+      </tr>
+      <tr>
+        <td>recursion-limit error</td>
+        <td>A generated term grew large enough to blow Python&rsquo;s stack.</td>
+        <td>Lower the iteration limit or simplify the precedence; usually a sign the system is diverging.</td>
+      </tr>
+    </tbody>
+  </table>
+</details>
+
+<fieldset>
+  <legend>Algorithm</legend>
+  <div class="controls">
+    <label class="inline"><input type="radio" name="algo" value="std" checked> Standard Knuth-Bendix</label>
+    <label class="inline"><input type="radio" name="algo" value="ac"> AC Knuth-Bendix</label>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Equations</legend>
+  <div class="preset-bar">
+    <button type="button" data-preset="group">Free group</button>
+    <button type="button" data-preset="abelian">Abelian group (AC)</button>
+    <button type="button" data-preset="idempotent">Idempotent AC</button>
+    <button type="button" data-preset="clear">Clear</button>
+  </div>
+  <textarea id="equations" spellcheck="false" placeholder="m(e, x) = x"></textarea>
+</fieldset>
+
+<fieldset>
+  <legend>Operators</legend>
+  <div class="row3">
+    <div>
+      <label for="ac">AC operators (comma-separated)</label>
+      <input id="ac" type="text" placeholder="e.g. p, plus">
+    </div>
+    <div>
+      <label for="prec">Precedence — highest first (comma-separated)</label>
+      <input id="prec" type="text" placeholder="e.g. i, m, e">
+    </div>
+    <div>
+      <label for="iters">Max iterations</label>
+      <input id="iters" type="number" min="1" value="5000">
+    </div>
+  </div>
+  <p class="small">
+    Symbols not listed in the precedence get rank 0. If the algorithm fails to orient an equation,
+    swap the offending symbols&rsquo; order so the side you want as the left-hand side has the
+    larger head symbol.
+  </p>
+</fieldset>
+
+<div class="controls">
+  <button id="run" class="primary" type="button" disabled>Run completion</button>
+  <span id="status">Loading Python runtime&hellip;</span>
+</div>
+
+<div id="output"></div>
+
+<script type="text/x-python" id="src-kb">
+"""Knuth-Bendix completion with recursive (lexicographic) path ordering.
+
+Terms are built from variables (``Var('x')``) and applications (``App('f', (...))``).
+Use ``parse('f(g(x), y)')`` for convenience: identifiers starting with u..z are vars.
+
+Run ``python knuth_bendix.py`` to see the free-group axioms completed.
+"""
+
+from dataclasses import dataclass
+from typing import Optional, Callable, Iterable, List, Tuple
+
+
+# ---- Terms ----
+
+@dataclass(frozen=True)
+class Var:
+    name: str
+    def __repr__(self) -> str:
+        return self.name
+
+
+@dataclass(frozen=True)
+class App:
+    op: str
+    args: tuple
+    def __repr__(self) -> str:
+        if not self.args:
+            return self.op
+        return f"{self.op}({','.join(map(repr, self.args))})"
+
+
+# ---- Substitution ----
+
+def apply_sub(t, sub: dict):
+    if isinstance(t, Var):
+        return apply_sub(sub[t], sub) if t in sub else t
+    return App(t.op, tuple(apply_sub(a, sub) for a in t.args))
+
+
+def occurs(x: Var, t, sub: dict) -> bool:
+    t = apply_sub(t, sub)
+    if isinstance(t, Var):
+        return t == x
+    return any(occurs(x, a, sub) for a in t.args)
+
+
+# ---- Robinson unification (MGU) ----
+
+def unify(s, t, sub: Optional[dict] = None) -> Optional[dict]:
+    if sub is None:
+        sub = {}
+    s = apply_sub(s, sub)
+    t = apply_sub(t, sub)
+    if isinstance(s, Var):
+        if s == t:
+            return sub
+        if occurs(s, t, sub):
+            return None
+        out = dict(sub); out[s] = t
+        return out
+    if isinstance(t, Var):
+        if occurs(t, s, sub):
+            return None
+        out = dict(sub); out[t] = s
+        return out
+    if s.op != t.op or len(s.args) != len(t.args):
+        return None
+    for a, b in zip(s.args, t.args):
+        sub = unify(a, b, sub)
+        if sub is None:
+            return None
+    return sub
+
+
+# ---- One-way pattern matching ----
+
+def match(pat, term, sub: Optional[dict] = None) -> Optional[dict]:
+    if sub is None:
+        sub = {}
+    if isinstance(pat, Var):
+        if pat in sub:
+            return sub if sub[pat] == term else None
+        out = dict(sub); out[pat] = term
+        return out
+    if isinstance(term, Var):
+        return None
+    if pat.op != term.op or len(pat.args) != len(term.args):
+        return None
+    for p, t in zip(pat.args, term.args):
+        sub = match(p, t, sub)
+        if sub is None:
+            return None
+    return sub
+
+
+# ---- Fresh variable renaming (for safe rule application / overlap) ----
+
+_counter = [0]
+
+def _fresh() -> str:
+    _counter[0] += 1
+    return f"_v{_counter[0]}"
+
+
+def _rename(t, mapping: dict):
+    if isinstance(t, Var):
+        if t not in mapping:
+            mapping[t] = Var(_fresh())
+        return mapping[t]
+    return App(t.op, tuple(_rename(a, mapping) for a in t.args))
+
+
+def freshen(lhs, rhs):
+    mapping: dict = {}
+    return _rename(lhs, mapping), _rename(rhs, mapping)
+
+
+# ---- Positions inside a term ----
+
+def positions(t):
+    yield ()
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            for p in positions(a):
+                yield (i,) + p
+
+
+def at_pos(t, pos):
+    for i in pos:
+        t = t.args[i]
+    return t
+
+
+def replace_at(t, pos, new):
+    if not pos:
+        return new
+    i = pos[0]
+    return App(t.op, t.args[:i] + (replace_at(t.args[i], pos[1:], new),) + t.args[i+1:])
+
+
+def _vars(t) -> set:
+    if isinstance(t, Var):
+        return {t}
+    out: set = set()
+    for a in t.args:
+        out |= _vars(a)
+    return out
+
+
+# ---- Recursive Path Ordering (lex status / LPO) ----
+
+Prec = Callable[[str, str], int]
+
+
+def rpo_gt(s, t, prec: Prec) -> bool:
+    """Strict RPO/LPO. ``prec(f, g)`` is >0 if f>g, 0 if equal, <0 if f<g."""
+    if isinstance(t, Var):
+        return isinstance(s, App) and t in _vars(s) and s != t
+    if isinstance(s, Var):
+        return False
+    for si in s.args:
+        if si == t or rpo_gt(si, t, prec):
+            return True
+    cmp = prec(s.op, t.op)
+    if cmp > 0:
+        return all(rpo_gt(s, tj, prec) for tj in t.args)
+    if cmp == 0 and len(s.args) == len(t.args):
+        for a, b in zip(s.args, t.args):
+            if a == b:
+                continue
+            if rpo_gt(a, b, prec):
+                return all(rpo_gt(s, tj, prec) for tj in t.args)
+            return False
+        return False
+    return False
+
+
+# ---- Rewriting ----
+
+def rewrite_once(t, rules):
+    for (lhs, rhs) in rules:
+        l2, r2 = freshen(lhs, rhs)
+        sub = match(l2, t)
+        if sub is not None:
+            return apply_sub(r2, sub)
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            na = rewrite_once(a, rules)
+            if na is not None:
+                return App(t.op, t.args[:i] + (na,) + t.args[i+1:])
+    return None
+
+
+def normalize(t, rules):
+    while True:
+        nt = rewrite_once(t, rules)
+        if nt is None:
+            return t
+        t = nt
+
+
+# ---- Critical pairs ----
+
+def critical_pairs(rule1, rule2):
+    """Overlap rule2's lhs into every non-variable position of rule1's lhs.
+    Skips the root overlap when rule1 is rule2 (the trivial self-overlap)."""
+    l1, r1 = freshen(*rule1)
+    l2, r2 = freshen(*rule2)
+    same = rule1 is rule2
+    pairs = []
+    for pos in positions(l1):
+        sub_l1 = at_pos(l1, pos)
+        if isinstance(sub_l1, Var):
+            continue
+        if same and pos == ():
+            continue
+        sub = unify(sub_l1, l2)
+        if sub is None:
+            continue
+        s = apply_sub(replace_at(l1, pos, r2), sub)
+        t = apply_sub(r1, sub)
+        pairs.append((s, t))
+    return pairs
+
+
+# ---- Knuth-Bendix completion (Huet-style: simplify + orient + compose/collapse) ----
+
+def _reducible(t, rule) -> bool:
+    lhs, _ = freshen(*rule)
+    for pos in positions(t):
+        if match(lhs, at_pos(t, pos)) is not None:
+            return True
+    return False
+
+
+def complete(
+    equations: Iterable[Tuple],
+    prec: Prec,
+    max_iters: int = 10000,
+    verbose: bool = False,
+) -> List[Tuple]:
+    """Run Knuth-Bendix completion; return oriented rules on success.
+
+    Raises ValueError if an equation cannot be oriented by ``prec``, or
+    RuntimeError if ``max_iters`` is exhausted before saturation.
+    """
+    rules: List[Tuple] = []
+    eqs: List[Tuple] = list(equations)
+
+    for it in range(max_iters):
+        if not eqs:
+            if verbose:
+                print(f"completed in {it} iterations; {len(rules)} rules")
+            return rules
+
+        s, t = eqs.pop(0)
+        s = normalize(s, rules)
+        t = normalize(t, rules)
+        if s == t:
+            continue
+
+        if rpo_gt(s, t, prec):
+            new_rule = (s, t)
+        elif rpo_gt(t, s, prec):
+            new_rule = (t, s)
+        else:
+            raise ValueError(f"Cannot orient: {s} = {t}")
+
+        if verbose:
+            print(f"  + rule: {new_rule[0]}  ->  {new_rule[1]}")
+
+        kept: List[Tuple] = []
+        for (l, r) in rules:
+            if _reducible(l, new_rule):
+                eqs.append((normalize(l, [new_rule]), normalize(r, [new_rule])))
+            else:
+                kept.append((l, normalize(r, [new_rule])))
+        rules = kept + [new_rule]
+
+        for r in rules:
+            for cp in critical_pairs(new_rule, r):
+                eqs.append(cp)
+            if r is not new_rule:
+                for cp in critical_pairs(r, new_rule):
+                    eqs.append(cp)
+
+    raise RuntimeError(
+        f"did not saturate in {max_iters} iterations; "
+        f"{len(rules)} rules, {len(eqs)} pending equations"
+    )
+
+
+# ---- Tiny parser ----
+
+VAR_LETTERS = set('uvwxyz')
+
+
+def parse(s: str):
+    """Parse 'f(g(x), y)' etc. Identifiers starting with u..z are variables."""
+    s = s.replace(' ', '')
+    pos = [0]
+
+    def peek() -> str:
+        return s[pos[0]] if pos[0] < len(s) else ''
+
+    def consume(expected: Optional[str] = None) -> str:
+        ch = s[pos[0]]
+        if expected is not None and ch != expected:
+            raise SyntaxError(f"expected {expected!r} at {pos[0]} in {s!r}")
+        pos[0] += 1
+        return ch
+
+    def name() -> str:
+        start = pos[0]
+        while pos[0] < len(s) and (s[pos[0]].isalnum() or s[pos[0]] == '_'):
+            pos[0] += 1
+        if start == pos[0]:
+            raise SyntaxError(f"expected name at {pos[0]} in {s!r}")
+        return s[start:pos[0]]
+
+    def term():
+        n = name()
+        if peek() == '(':
+            consume('(')
+            args = [term()]
+            while peek() == ',':
+                consume(',')
+                args.append(term())
+            consume(')')
+            return App(n, tuple(args))
+        return Var(n) if n[0] in VAR_LETTERS else App(n, ())
+
+    t = term()
+    if pos[0] != len(s):
+        raise SyntaxError(f"trailing input at {pos[0]} in {s!r}")
+    return t
+</script>
+
+<script type="text/x-python" id="src-ackb">
+"""Associative-commutative Knuth-Bendix completion.
+
+Designated function symbols are declared AC. AC subterms are flattened and
+canonically sorted, so AC-equal terms have identical Python representations.
+
+- Rewriting uses AC matching: a variable under an AC head may absorb a non-empty
+  subset of the multiset of arguments.
+- Critical pairs use AC unification (enumerative; sound and complete for cases
+  where each variable binds to a non-empty term -- empty bindings not supported).
+- Extension rules f(l, X) -> f(r, X) are added for AC-rooted rules to catch
+  overlaps at non-root positions that pure AC unification at root would miss.
+- Ordering: RPO with multiset extension under AC heads (AC-compatible LPO).
+"""
+
+from dataclasses import dataclass
+from typing import Optional, Callable, Iterable, List, Tuple, Set, Iterator
+from itertools import combinations
+
+
+# ---- Terms ----
+
+@dataclass(frozen=True)
+class Var:
+    name: str
+    def __repr__(self) -> str:
+        return self.name
+
+
+@dataclass(frozen=True)
+class App:
+    op: str
+    args: tuple
+    def __repr__(self) -> str:
+        if not self.args:
+            return self.op
+        return f"{self.op}({','.join(map(repr, self.args))})"
+
+
+def _key(t):
+    if isinstance(t, Var):
+        return (1, t.name)
+    if not t.args:
+        return (0, t.op)
+    return (2, t.op, len(t.args), tuple(_key(a) for a in t.args))
+
+
+# ---- Flattening (canonical form for AC) ----
+
+def flatten(t, ac: Set[str]):
+    if isinstance(t, Var):
+        return t
+    new_args = []
+    for a in t.args:
+        fa = flatten(a, ac)
+        if t.op in ac and isinstance(fa, App) and fa.op == t.op:
+            new_args.extend(fa.args)
+        else:
+            new_args.append(fa)
+    if t.op in ac:
+        new_args.sort(key=_key)
+    return App(t.op, tuple(new_args))
+
+
+def ac_eq(s, t, ac) -> bool:
+    return flatten(s, ac) == flatten(t, ac)
+
+
+def _splatter(op: str, lst: list, ac: Set[str]) -> list:
+    """Flatten each elt and splice top-level f-rooted ones into the multiset."""
+    out = []
+    for x in lst:
+        fx = flatten(x, ac)
+        if isinstance(fx, App) and fx.op == op:
+            out.extend(fx.args)
+        else:
+            out.append(fx)
+    return out
+
+
+# ---- Substitutions ----
+
+def apply_sub(t, sub: dict):
+    if isinstance(t, Var):
+        return apply_sub(sub[t], sub) if t in sub else t
+    return App(t.op, tuple(apply_sub(a, sub) for a in t.args))
+
+
+def occurs(x: Var, t, sub: dict) -> bool:
+    t = apply_sub(t, sub)
+    if isinstance(t, Var):
+        return t == x
+    return any(occurs(x, a, sub) for a in t.args)
+
+
+# ---- Fresh variables ----
+
+_counter = [0]
+
+def _fresh() -> str:
+    _counter[0] += 1
+    return f"_v{_counter[0]}"
+
+
+def _rename(t, mapping: dict):
+    if isinstance(t, Var):
+        if t not in mapping:
+            mapping[t] = Var(_fresh())
+        return mapping[t]
+    return App(t.op, tuple(_rename(a, mapping) for a in t.args))
+
+
+def freshen(*ts):
+    m: dict = {}
+    return tuple(_rename(t, m) for t in ts)
+
+
+# ---- AC matching ----
+
+def ac_match(pat, term, ac: Set[str], sub: Optional[dict] = None) -> Iterator[dict]:
+    """Yield all sigma with sigma(pat) =_AC term. Both args should be flattened."""
+    if sub is None:
+        sub = {}
+    if isinstance(pat, Var):
+        if pat in sub:
+            if ac_eq(sub[pat], term, ac):
+                yield sub
+            return
+        out = dict(sub); out[pat] = term
+        yield out
+        return
+    if isinstance(term, Var):
+        return
+    if pat.op != term.op:
+        return
+    if pat.op not in ac:
+        if len(pat.args) != len(term.args):
+            return
+        yield from _match_seq(list(pat.args), list(term.args), ac, sub)
+        return
+    yield from _ac_match_rec(pat.op, list(pat.args), list(term.args), ac, sub)
+
+
+def _match_seq(pats, terms, ac, sub):
+    if not pats:
+        yield sub; return
+    for s2 in ac_match(pats[0], terms[0], ac, sub):
+        yield from _match_seq(pats[1:], terms[1:], ac, s2)
+
+
+def _ac_match_rec(op, pats, terms, ac, sub):
+    if not pats:
+        if not terms:
+            yield sub
+        return
+    p, rest = pats[0], pats[1:]
+    if not isinstance(p, Var):
+        for i, ti in enumerate(terms):
+            for s2 in ac_match(p, ti, ac, sub):
+                yield from _ac_match_rec(op, rest, terms[:i] + terms[i+1:], ac, s2)
+        return
+    if p in sub:
+        bound = sub[p]
+        bound_args = (list(bound.args) if isinstance(bound, App) and bound.op == op
+                      else [bound])
+        avail = list(terms)
+        for ba in bound_args:
+            j = -1
+            for i, ti in enumerate(avail):
+                if ac_eq(ba, ti, ac):
+                    j = i; break
+            if j < 0:
+                return
+            avail.pop(j)
+        yield from _ac_match_rec(op, rest, avail, ac, sub)
+        return
+    n_nonvar = sum(1 for q in rest if not isinstance(q, Var))
+    n_unbound = sum(1 for q in rest
+                    if isinstance(q, Var) and q not in sub and q != p)
+    max_size = len(terms) - n_nonvar - n_unbound
+    if max_size < 1:
+        return
+    seen = set()
+    for k in range(1, max_size + 1):
+        for chosen_idx in combinations(range(len(terms)), k):
+            chosen = tuple(sorted([terms[i] for i in chosen_idx], key=_key))
+            if chosen in seen:
+                continue
+            seen.add(chosen)
+            rem = [terms[i] for i in range(len(terms)) if i not in chosen_idx]
+            val = chosen[0] if k == 1 else flatten(App(op, chosen), ac)
+            s2 = dict(sub); s2[p] = val
+            yield from _ac_match_rec(op, rest, rem, ac, s2)
+
+
+# ---- AC unification (enumerative) ----
+
+def ac_unify(s, t, ac: Set[str], sub: Optional[dict] = None) -> Iterator[dict]:
+    if sub is None:
+        sub = {}
+    s = flatten(apply_sub(s, sub), ac)
+    t = flatten(apply_sub(t, sub), ac)
+    if s == t:
+        yield sub; return
+    if isinstance(s, Var):
+        if occurs(s, t, sub):
+            return
+        out = dict(sub); out[s] = t
+        yield out; return
+    if isinstance(t, Var):
+        if occurs(t, s, sub):
+            return
+        out = dict(sub); out[t] = s
+        yield out; return
+    if s.op != t.op:
+        return
+    if s.op not in ac:
+        if len(s.args) != len(t.args):
+            return
+        yield from _unify_seq(list(s.args), list(t.args), ac, sub)
+        return
+    M = _splatter(s.op, [apply_sub(x, sub) for x in s.args], ac)
+    N = _splatter(s.op, [apply_sub(x, sub) for x in t.args], ac)
+    i = 0
+    while i < len(M):
+        j = -1
+        for k, n in enumerate(N):
+            if M[i] == n:
+                j = k; break
+        if j >= 0:
+            M.pop(i); N.pop(j)
+        else:
+            i += 1
+    yield from _ac_unify_enum(s.op, M, N, ac, sub)
+
+
+def _unify_seq(ss, ts, ac, sub):
+    if not ss:
+        yield sub; return
+    for s2 in ac_unify(ss[0], ts[0], ac, sub):
+        yield from _unify_seq(ss[1:], ts[1:], ac, s2)
+
+
+def _bind(var, val, sub):
+    if isinstance(val, Var) and val == var:
+        return sub
+    if var in sub:
+        return None
+    if occurs(var, val, sub):
+        return None
+    out = dict(sub); out[var] = val
+    return out
+
+
+def _ac_unify_enum(op, M, N, ac, sub):
+    if not M and not N:
+        yield sub; return
+    if not M or not N:
+        return
+    m, M_rest = M[0], M[1:]
+    if isinstance(m, Var):
+        seen = set()
+        for size in range(1, len(N) + 1):
+            for idx in combinations(range(len(N)), size):
+                chosen = tuple(sorted([N[i] for i in idx], key=_key))
+                if chosen in seen:
+                    continue
+                seen.add(chosen)
+                rem = [N[i] for i in range(len(N)) if i not in idx]
+                val = chosen[0] if size == 1 else flatten(App(op, chosen), ac)
+                s2 = _bind(m, val, sub)
+                if s2 is None:
+                    continue
+                M_next = _splatter(op, [apply_sub(x, s2) for x in M_rest], ac)
+                N_next = _splatter(op, [apply_sub(x, s2) for x in rem], ac)
+                yield from _ac_unify_enum(op, M_next, N_next, ac, s2)
+    else:
+        for i, ni in enumerate(N):
+            for s2 in ac_unify(m, ni, ac, sub):
+                rem = N[:i] + N[i+1:]
+                M_next = _splatter(op, [apply_sub(x, s2) for x in M_rest], ac)
+                N_next = _splatter(op, [apply_sub(x, s2) for x in rem], ac)
+                yield from _ac_unify_enum(op, M_next, N_next, ac, s2)
+
+
+# ---- Positions ----
+
+def positions(t):
+    yield ()
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            for p in positions(a):
+                yield (i,) + p
+
+
+def at_pos(t, pos):
+    for i in pos:
+        t = t.args[i]
+    return t
+
+
+def replace_at(t, pos, new):
+    if not pos:
+        return new
+    i = pos[0]
+    return App(t.op, t.args[:i] + (replace_at(t.args[i], pos[1:], new),) + t.args[i+1:])
+
+
+def _vars(t):
+    if isinstance(t, Var):
+        return {t}
+    out = set()
+    for a in t.args:
+        out |= _vars(a)
+    return out
+
+
+# ---- AC-compatible RPO (multiset extension under AC heads) ----
+
+Prec = Callable[[str, str], int]
+
+
+def _mul_gt(M, N, gt) -> bool:
+    Mb, Nb = list(M), list(N)
+    i = 0
+    while i < len(Mb):
+        j = -1
+        for k, n in enumerate(Nb):
+            if Mb[i] == n:
+                j = k; break
+        if j >= 0:
+            Mb.pop(i); Nb.pop(j)
+        else:
+            i += 1
+    if not Mb:
+        return False
+    return all(any(gt(m, n) for m in Mb) for n in Nb)
+
+
+def rpo_ac_gt(s, t, prec: Prec, ac: Set[str]) -> bool:
+    if s == t:
+        return False
+    if isinstance(t, Var):
+        return isinstance(s, App) and t in _vars(s)
+    if isinstance(s, Var):
+        return False
+    gt = lambda a, b: rpo_ac_gt(a, b, prec, ac)
+    for si in s.args:
+        if si == t or gt(si, t):
+            return True
+    cmp = prec(s.op, t.op)
+    if cmp > 0:
+        return all(gt(s, tj) for tj in t.args)
+    if cmp == 0:
+        if s.op in ac:
+            return _mul_gt(list(s.args), list(t.args), gt) and all(gt(s, tj) for tj in t.args)
+        if len(s.args) == len(t.args):
+            for a, b in zip(s.args, t.args):
+                if a == b:
+                    continue
+                if gt(a, b):
+                    return all(gt(s, tj) for tj in t.args)
+                return False
+            return False
+    return False
+
+
+# ---- Rewriting under AC ----
+
+def ac_rewrite_once(t, rules, ac):
+    for (lhs, rhs) in rules:
+        lhs2, rhs2 = freshen(lhs, rhs)
+        for sub in ac_match(lhs2, t, ac):
+            return flatten(apply_sub(rhs2, sub), ac)
+    if isinstance(t, App):
+        for i, a in enumerate(t.args):
+            na = ac_rewrite_once(a, rules, ac)
+            if na is not None:
+                return flatten(App(t.op, t.args[:i] + (na,) + t.args[i+1:]), ac)
+    return None
+
+
+def ac_normalize(t, rules, ac):
+    t = flatten(t, ac)
+    while True:
+        nt = ac_rewrite_once(t, rules, ac)
+        if nt is None:
+            return t
+        t = nt
+
+
+# ---- Extension rules ----
+
+def extension_rule(rule, ac):
+    lhs, rhs = rule
+    if not isinstance(lhs, App) or lhs.op not in ac:
+        return None
+    X = Var(_fresh())
+    elhs = flatten(App(lhs.op, lhs.args + (X,)), ac)
+    erhs = flatten(App(lhs.op, (rhs, X)), ac)
+    return (elhs, erhs)
+
+
+# ---- Critical pairs ----
+
+def ac_critical_pairs(rule1, rule2, ac):
+    l1, r1 = freshen(*rule1)
+    l2, r2 = freshen(*rule2)
+    l1 = flatten(l1, ac); r1 = flatten(r1, ac)
+    l2 = flatten(l2, ac); r2 = flatten(r2, ac)
+    same = rule1 is rule2
+    pairs = []
+    seen = set()
+    for pos in positions(l1):
+        sub_l1 = at_pos(l1, pos)
+        if isinstance(sub_l1, Var):
+            continue
+        if same and pos == ():
+            continue
+        for sub in ac_unify(sub_l1, l2, ac):
+            s = flatten(apply_sub(replace_at(l1, pos, r2), sub), ac)
+            t = flatten(apply_sub(r1, sub), ac)
+            if s == t:
+                continue
+            key = (s, t)
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append(key)
+    return pairs
+
+
+# ---- AC Knuth-Bendix completion ----
+
+def _reducible(t, rule, ac) -> bool:
+    lhs, _ = freshen(*rule)
+    lhs = flatten(lhs, ac)
+    for pos in positions(t):
+        for _ in ac_match(lhs, at_pos(t, pos), ac):
+            return True
+    return False
+
+
+def _eq_key(s, t):
+    ks, kt = _key(s), _key(t)
+    return (s, t) if ks <= kt else (t, s)
+
+
+def ac_complete(
+    equations: Iterable[Tuple],
+    prec: Prec,
+    ac: Set[str],
+    max_iters: int = 5000,
+    verbose: bool = False,
+) -> List[Tuple]:
+    rules: List[Tuple] = []
+    eqs: List[Tuple] = []
+    seen_eqs: Set = set()
+
+    def add_eq(s, t):
+        s = flatten(s, ac); t = flatten(t, ac)
+        if s == t:
+            return
+        k = _eq_key(s, t)
+        if k in seen_eqs:
+            return
+        seen_eqs.add(k)
+        eqs.append((s, t))
+
+    for s, t in equations:
+        add_eq(s, t)
+
+    def with_extensions(rs):
+        out = list(rs)
+        for r in rs:
+            ext = extension_rule(r, ac)
+            if ext is not None:
+                out.append(ext)
+        return out
+
+    for it in range(max_iters):
+        if not eqs:
+            if verbose:
+                print(f"completed in {it} iterations; {len(rules)} rules")
+            return rules
+
+        s, t = eqs.pop(0)
+        ar = with_extensions(rules)
+        s = ac_normalize(s, ar, ac)
+        t = ac_normalize(t, ar, ac)
+        if s == t:
+            continue
+
+        if rpo_ac_gt(s, t, prec, ac):
+            new_rule = (s, t)
+        elif rpo_ac_gt(t, s, prec, ac):
+            new_rule = (t, s)
+        else:
+            raise ValueError(f"Cannot orient: {s} = {t}")
+
+        if verbose:
+            print(f"  + rule {len(rules)+1}: {new_rule[0]}  ->  {new_rule[1]}")
+
+        new_use = [new_rule]
+        ext_new = extension_rule(new_rule, ac)
+        if ext_new is not None:
+            new_use.append(ext_new)
+
+        kept: List[Tuple] = []
+        for (l, r) in rules:
+            if any(_reducible(l, nr, ac) for nr in new_use):
+                add_eq(ac_normalize(l, new_use, ac), ac_normalize(r, new_use, ac))
+            else:
+                kept.append((l, ac_normalize(r, new_use, ac)))
+        rules = kept + [new_rule]
+
+        all_cp = with_extensions(rules)
+        for nr in new_use:
+            for r in all_cp:
+                for cp in ac_critical_pairs(nr, r, ac):
+                    add_eq(*cp)
+                for cp in ac_critical_pairs(r, nr, ac):
+                    add_eq(*cp)
+
+    raise RuntimeError(
+        f"did not saturate in {max_iters} iterations; "
+        f"{len(rules)} rules, {len(eqs)} pending eqs"
+    )
+
+
+# ---- Parser ----
+
+VAR_LETTERS = set('uvwxyz')
+
+
+def parse(s: str):
+    s = s.replace(' ', '')
+    pos = [0]
+    def peek(): return s[pos[0]] if pos[0] < len(s) else ''
+    def consume(c=None):
+        ch = s[pos[0]]
+        if c is not None and ch != c:
+            raise SyntaxError(f"expected {c!r} at {pos[0]} in {s!r}")
+        pos[0] += 1
+        return ch
+    def name():
+        start = pos[0]
+        while pos[0] < len(s) and (s[pos[0]].isalnum() or s[pos[0]] == '_'):
+            pos[0] += 1
+        if start == pos[0]:
+            raise SyntaxError(f"expected name at {pos[0]} in {s!r}")
+        return s[start:pos[0]]
+    def term():
+        n = name()
+        if peek() == '(':
+            consume('(')
+            args = [term()]
+            while peek() == ',':
+                consume(',')
+                args.append(term())
+            consume(')')
+            return App(n, tuple(args))
+        return Var(n) if n[0] in VAR_LETTERS else App(n, ())
+    t = term()
+    if pos[0] != len(s):
+        raise SyntaxError(f"trailing input at {pos[0]} in {s!r}")
+    return t
+</script>
+
+<script type="text/x-python" id="src-driver">
+import sys
+sys.setrecursionlimit(50000)
+
+def run_completion(eq_text, ac_text, prec_text, algorithm, max_iters):
+    if algorithm == 'ac':
+        import ac_knuth_bendix as mod
+    else:
+        import knuth_bendix as mod
+
+    eqs = []
+    for i, raw in enumerate(eq_text.splitlines(), 1):
+        line = raw.split('#', 1)[0].strip()
+        if not line:
+            continue
+        if '=' not in line:
+            return {'ok': False, 'kind': 'parse',
+                    'message': f'Line {i}: missing "=" -- got {raw!r}'}
+        lhs_s, rhs_s = line.split('=', 1)
+        if not lhs_s.strip() or not rhs_s.strip():
+            return {'ok': False, 'kind': 'parse',
+                    'message': f'Line {i}: empty side in equation: {raw!r}'}
+        try:
+            lhs = mod.parse(lhs_s.strip())
+            rhs = mod.parse(rhs_s.strip())
+        except SyntaxError as e:
+            return {'ok': False, 'kind': 'parse',
+                    'message': f'Line {i}: {e}'}
+        eqs.append((lhs, rhs))
+
+    if not eqs:
+        return {'ok': False, 'kind': 'input', 'message': 'No equations supplied.'}
+
+    ac_ops = {s.strip() for s in ac_text.split(',') if s.strip()}
+    rank_syms = [s.strip() for s in prec_text.split(',') if s.strip()]
+    rank = {s: len(rank_syms) - i for i, s in enumerate(rank_syms)}
+    def prec(f, g):
+        return rank.get(f, 0) - rank.get(g, 0)
+
+    if algorithm != 'ac' and ac_ops:
+        return {'ok': False, 'kind': 'input',
+                'message': ('Standard Knuth-Bendix does not handle AC operators. '
+                            'Either clear the AC operator list, or switch to AC mode.')}
+
+    try:
+        if algorithm == 'ac':
+            rules = mod.ac_complete(eqs, prec, ac_ops, max_iters=int(max_iters))
+        else:
+            rules = mod.complete(eqs, prec, max_iters=int(max_iters))
+    except ValueError as e:
+        return {'ok': False, 'kind': 'orient', 'message': str(e)}
+    except RuntimeError as e:
+        return {'ok': False, 'kind': 'saturate', 'message': str(e)}
+    except RecursionError as e:
+        return {'ok': False, 'kind': 'recursion', 'message': str(e)}
+    except Exception as e:
+        return {'ok': False, 'kind': 'internal',
+                'message': f'{type(e).__name__}: {e}'}
+
+    return {'ok': True, 'rules': [(repr(l), repr(r)) for l, r in rules]}
+</script>
+
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js"></script>
+<script>
+'use strict';
+
+const PRESETS = {
+  group: {
+    algo: 'std',
+    equations: 'm(e, x) = x\nm(i(x), x) = e\nm(m(x, y), z) = m(x, m(y, z))',
+    ac: '',
+    prec: 'i, m, e',
+  },
+  abelian: {
+    algo: 'ac',
+    equations: 'p(e, x) = x\np(i(x), x) = e',
+    ac: 'p',
+    prec: 'i, p, e',
+  },
+  idempotent: {
+    algo: 'ac',
+    equations: 'p(x, x) = x',
+    ac: 'p',
+    prec: 'p',
+  },
+  clear: { algo: 'std', equations: '', ac: '', prec: '' },
+};
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  document.getElementById('equations').value = p.equations;
+  document.getElementById('ac').value = p.ac;
+  document.getElementById('prec').value = p.prec;
+  const radio = document.querySelector('input[name=algo][value=' + p.algo + ']');
+  if (radio) radio.checked = true;
+}
+
+document.querySelectorAll('.preset-bar button').forEach(function (btn) {
+  btn.addEventListener('click', function () { applyPreset(btn.dataset.preset); });
+});
+
+applyPreset('group');
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];
+  });
+}
+
+let pyodidePromise = null;
+
+async function ensurePyodide() {
+  if (pyodidePromise) return pyodidePromise;
+  const status = document.getElementById('status');
+  status.textContent = 'Loading Python runtime…';
+  pyodidePromise = (async () => {
+    const py = await loadPyodide({
+      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/'
+    });
+    py.FS.writeFile('knuth_bendix.py',
+      document.getElementById('src-kb').textContent);
+    py.FS.writeFile('ac_knuth_bendix.py',
+      document.getElementById('src-ackb').textContent);
+    await py.runPythonAsync(document.getElementById('src-driver').textContent);
+    return py;
+  })();
+  try {
+    const py = await pyodidePromise;
+    status.textContent = 'Ready.';
+    document.getElementById('run').disabled = false;
+    return py;
+  } catch (e) {
+    status.textContent = 'Failed to load Python runtime.';
+    pyodidePromise = null;
+    throw e;
+  }
+}
+
+ensurePyodide().catch(function (e) {
+  const out = document.getElementById('output');
+  out.innerHTML = '<div class="err"><strong>Could not load Pyodide.</strong>' +
+    '<pre>' + escapeHtml(String(e)) + '</pre>' +
+    '<div class="hint">Pyodide is loaded from a CDN. Check your internet connection, or any browser extension blocking jsdelivr.net or WebAssembly.</div>' +
+    '</div>';
+});
+
+function renderResult(res, ctx) {
+  const out = document.getElementById('output');
+  if (res.ok) {
+    const items = res.rules.map(function (pair) {
+      return '<li>' + escapeHtml(pair[0]) + '  →  ' + escapeHtml(pair[1]) + '</li>';
+    }).join('');
+    out.innerHTML =
+      '<div class="ok">' +
+      '<strong>Confluent rewrite system (' + res.rules.length +
+      ' rule' + (res.rules.length === 1 ? '' : 's') + ').</strong>' +
+      (res.rules.length === 0
+        ? '<p class="hint">No rules were generated. (Every supplied equation reduced to a trivial identity.)</p>'
+        : '<ol class="rules">' + items + '</ol>') +
+      '</div>';
+    return;
+  }
+  let title, hint = '';
+  switch (res.kind) {
+    case 'parse':
+      title = 'Could not parse the input.';
+      hint = 'Use the form <code>f(g(x), y) = h(z)</code>. ' +
+             'Identifiers starting with u..z are variables; everything else is a function symbol or constant. ' +
+             'Each line must contain exactly one <code>=</code>.';
+      break;
+    case 'input':
+      title = 'Bad input.';
+      break;
+    case 'orient':
+      title = 'Algorithm failed: cannot orient an equation.';
+      hint = 'The recursive-path ordering with precedence <code>' +
+             escapeHtml(ctx.prec || '(empty)') + '</code> cannot decide which side of this equation is bigger, ' +
+             'so neither side can become the left-hand side of a rewrite rule. ' +
+             'Adjust the precedence so the head symbol of the intended left-hand side comes <em>earlier</em> in the list. ' +
+             'If both sides have the same head, RPO falls back to comparing arguments — in that case the equation may not be orientable at all and the theory needs to be presented differently.';
+      break;
+    case 'saturate':
+      title = 'Algorithm failed: ran out of iterations.';
+      hint = 'Completion kept producing new critical pairs after the iteration budget was exhausted. ' +
+             'Either raise the iteration limit, or the equational theory may have no finite confluent presentation under this precedence ' +
+             '(Knuth-Bendix is semi-decidable — non-termination here doesn&rsquo;t mean the problem is unsolvable, but no finite system was found).';
+      break;
+    case 'recursion':
+      title = 'Algorithm failed: Python recursion limit hit.';
+      hint = 'A term grew large enough to blow the recursion stack. Try a coarser precedence, fewer iterations, or a different formulation.';
+      break;
+    default:
+      title = 'Algorithm halted with an internal error.';
+      hint = 'This is likely a bug in the embedded scripts — please report the message above with your input.';
+  }
+  out.innerHTML =
+    '<div class="err">' +
+    '<strong>' + title + '</strong>' +
+    '<pre>' + escapeHtml(res.message) + '</pre>' +
+    (hint ? '<div class="hint">' + hint + '</div>' : '') +
+    '</div>';
+}
+
+document.getElementById('run').addEventListener('click', async function () {
+  const out = document.getElementById('output');
+  const status = document.getElementById('status');
+  const runBtn = document.getElementById('run');
+  out.innerHTML = '';
+  let py;
+  try {
+    py = await ensurePyodide();
+  } catch (e) {
+    return; // ensurePyodide already rendered the error
+  }
+
+  runBtn.disabled = true;
+  status.textContent = 'Running…';
+
+  const eq = document.getElementById('equations').value;
+  const ac = document.getElementById('ac').value;
+  const prec = document.getElementById('prec').value;
+  const iters = parseInt(document.getElementById('iters').value, 10) || 5000;
+  const algo = document.querySelector('input[name=algo]:checked').value;
+
+  try {
+    py.globals.set('_eq', eq);
+    py.globals.set('_ac', ac);
+    py.globals.set('_pr', prec);
+    py.globals.set('_alg', algo);
+    py.globals.set('_it', iters);
+    const proxy = await py.runPythonAsync('run_completion(_eq, _ac, _pr, _alg, _it)');
+    const res = proxy.toJs({ dict_converter: Object.fromEntries });
+    proxy.destroy();
+    renderResult(res, { algo: algo, prec: prec });
+  } catch (e) {
+    out.innerHTML =
+      '<div class="err"><strong>Unexpected error.</strong>' +
+      '<pre>' + escapeHtml(String(e && e.message ? e.message : e)) + '</pre></div>';
+  } finally {
+    runBtn.disabled = false;
+    status.textContent = 'Ready.';
+  }
+});
+</script>
+</body>
+</html>
