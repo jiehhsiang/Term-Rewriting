@@ -26,7 +26,8 @@
 **可得性（2026-09-19 已確認）**：使用者 Google Drive「古史辨」資料夾內有樸社原版全本掃描
 `古史辨._第5冊（上 今古文之辯 下 陰陽與儒家）.pdf`（24.4 MB，Drive file id `1HU2KcvduoktEDwmn5-44iip1_0051EKY`），**無文字層**；
 另有《古史辨總目 辨偽叢刊總目》（景山書社 1935，NLC416 / NLC511 兩種掃描，有文字層）。
-下表篇目、日期、頁碼即據總目 OCR 整理，OCR 難辨處標「待核」。放入本 repo 後（見 README「本地文獻」）即可用 Read 逐頁核對，達 [A] 級。
+下表篇目、日期、頁碼即據總目 OCR 整理，OCR 難辨處標「待核」。
+**2026-09-19 更新**：PDF 已在 `debate/bibliography/local/gushibian-5.pdf`（801 頁），本機 OCR 文字 `gushibian-5.txt`（不入 repo），頁碼對照見 `local/PAGEMAP.md`（物理頁＝印刷頁＋43）。已核：第 255 篇錢穆〈年譜〉起於物理頁 144，自序開篇即「其不可通者二十有八端」；第 254 篇錢玄同〈重論〉為 1931-11-16 增改本，篇末附記說明與方國瑜校點本書前所印之序不同；第 259 篇胡適摘 Karlgren 起於物理頁 336，原刊中山大學語言歷史學研究所週刊 1:1，並提及飯島忠夫之天文論證。
 
 ### 第五冊目錄（據 1935 景山書社《古史辨總目》OCR）
 
@@ -83,7 +84,7 @@
 
 ## 一之三、劉逢祿《左氏春秋考證》二卷：已取得（2026-09-19）
 
-**使用者 Drive**：`辨偽叢刊_樸社景山書社/劉逢祿 左氏春秋考證.pdf`（9.9 MB，Drive file id `1XblamepzzzPZcebKSoplKdmEm6-o6swp`），**有文字層**（連接器可直接讀出文字，但大檔只回傳前段，全文須把 PDF 放入 `debate/bibliography/local/` 後以 PyMuPDF 抽取）。
+**使用者 Drive**：`辨偽叢刊_樸社景山書社/劉逢祿 左氏春秋考證.pdf`（9.9 MB，Drive file id `1XblamepzzzPZcebKSoplKdmEm6-o6swp`），連接器可讀出前段文字（Google 即時 OCR），PDF 本身無文字層。**2026-09-19 更新**：PDF 已在 `debate/bibliography/local/liu-fenglu-zuoshi-chunqiu-kaozheng-1933.pdf`（237 頁），本機 OCR 文字同名 `.txt`（不入 repo），頁碼對照見 `local/PAGEMAP.md`（正文物理頁＝印刷頁＋65）。
 
 **版本**：《辨偽叢刊》之一，清劉逢祿著，顧頡剛校點，樸社出版、景山書社發行，中華民國二十二年（1933）七月出版，實價大洋五角。
 **內容**（據連接器回傳之目錄頁）：

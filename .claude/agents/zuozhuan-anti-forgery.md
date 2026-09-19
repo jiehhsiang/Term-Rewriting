@@ -47,6 +47,8 @@ tools: WebSearch, WebFetch, Read, Write, Glob, Grep
 `debate/bibliography/local/` 若有掃描 PDF（例如 `gushibian-5.pdf`，《古史辨》第五冊）及其 OCR 文字 `*.txt`：
 先 Grep `*.txt` 定位（格式 `==== page N ====`，N 為 PDF 物理頁），再用 Read 讀該 PDF 的對應頁（`pages` 參數）核對原文，
 引文才可標 [A]，並同時註明 PDF 物理頁與書上印刷頁碼。OCR 文字錯字多，**不得**未經核頁直接引用。
+先讀 `debate/bibliography/local/PAGEMAP.md`：它給出物理頁與印刷頁的換算和各篇起頁，可直接翻到目標文章。
+Read 讀 PDF 頁失敗時，用 `python3 debate/tools/pdf_page.py <pdf> <page>` 渲染 PNG 再 Read。
 
 ## 工作流程
 
