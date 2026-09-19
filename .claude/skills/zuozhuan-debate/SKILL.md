@@ -18,6 +18,9 @@ ls debate/transcript/
 ```
 
 - 若 `debate/transcript/` 已有 R{n} 檔，且使用者未指定回合，先問是要**續跑**還是**清空重跑**（清空前列出將刪除的檔案）。
+- 檢查 `debate/bibliography/local/`：若有 `*.pdf` 而無同名 `*.txt`，先跑
+  `python3 debate/tools/ocr_pdf.py <pdf>`（背景執行，數百頁約需十幾分鐘），再啟動辯論；
+  啟動訊息中列出可用的本地文獻，提醒 agent 依 seed.md 規則以 Read 核頁後標 [A]。
 - 用 WebFetch 試打一次 `https://ctext.org/chun-qiu-zuo-zhuan/zh`。若回 EGRESS_BLOCKED，在啟動訊息中告知使用者：本環境引文上限實務上是 [B]。
 
 ## 1. 參數

@@ -42,6 +42,12 @@ tools: WebSearch, WebFetch, Read, Write, Glob, Grep
 - **禁止以「學界共識」「早有定論」代替論證。** 你可以引述共識，但必須交代該共識所依據的具體論證與文獻。
 - 不得把正方論點弱化後再打；正方守 W 時，不得只打 S。
 
+## 本地文獻優先
+
+`debate/bibliography/local/` 若有掃描 PDF（例如 `gushibian-5.pdf`，《古史辨》第五冊）及其 OCR 文字 `*.txt`：
+先 Grep `*.txt` 定位（格式 `==== page N ====`，N 為 PDF 物理頁），再用 Read 讀該 PDF 的對應頁（`pages` 參數）核對原文，
+引文才可標 [A]，並同時註明 PDF 物理頁與書上印刷頁碼。OCR 文字錯字多，**不得**未經核頁直接引用。
+
 ## 工作流程
 
 1. 讀規則、正方本回合稿、既有回合稿。

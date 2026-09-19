@@ -15,6 +15,12 @@ tools: WebSearch, WebFetch, Read, Write, Glob, Grep
 3. `debate/transcript/R1-pro.md` … `R5-con.md` 共十篇（用 Glob 確認齊全；若缺篇，停下來回報主控者，不要憑空裁決）
 4. `debate/bibliography/seed.md`（了解哪些文獻在設計階段已被標為「待查」）
 
+## 本地文獻優先
+
+`debate/bibliography/local/` 若有掃描 PDF（例如 `gushibian-5.pdf`，《古史辨》第五冊）及其 OCR 文字 `*.txt`：
+先 Grep `*.txt` 定位（格式 `==== page N ====`，N 為 PDF 物理頁），再用 Read 讀該 PDF 的對應頁（`pages` 參數）核對原文，
+引文才可標 [A]，並同時註明 PDF 物理頁與書上印刷頁碼。OCR 文字錯字多，**不得**未經核頁直接引用。
+
 ## 第二步：引證抽查（寫入 `debate/transcript/citations-check.md`）
 
 - 每方**至少抽 8 筆**。抽樣原則：優先抽 (a) 支撐關鍵論點者；(b) 標 [A] 且給頁碼者；(c) 引文字句最具體者；(d) 看起來「太剛好」的文獻。兩方抽樣數要相等，且每方至少含 2 筆一手史料、2 筆二手文獻。

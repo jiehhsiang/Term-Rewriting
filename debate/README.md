@@ -62,6 +62,23 @@ cambridge.org、jstor.org、hkbu.edu.hk、tsinghua.edu.cn 等學術站台的 Web
 
 參考：<https://code.claude.com/docs/en/claude-code-on-the-web>（環境與網路政策說明）。
 
+## 本地文獻（可讓引文達到 [A] 級，不受網路限制）
+
+把掃描 PDF 放進 `debate/bibliography/local/`，agent 就能用 Read 逐頁核對、給頁碼引用。
+目前設計以《古史辨》第五冊為第一優先（使用者 Drive 已有全本掃描，但無文字層）。
+
+把檔案送進容器的可行途徑（本環境 Drive 連接器只能讀文字，不能搬 24 MB 二進位檔；drive.google.com 亦被擋）：
+1. **推到本分支**：`git checkout claude/zuozhuan-authenticity-debate-w2tz8f`，把 PDF 複製為
+   `debate/bibliography/local/gushibian-5.pdf`，commit 並 push。GitHub 單檔上限 100 MB；網頁拖曳上傳上限 25 MB（第五冊 24.4 MB 剛好可以）。
+2. 之後在 session 中 `git pull`，再跑 OCR 產生可 grep 的定位文字：
+   ```
+   pip install pymupdf rapidocr-onnxruntime
+   python3 debate/tools/ocr_pdf.py debate/bibliography/local/gushibian-5.pdf
+   ```
+   輸出 `gushibian-5.txt`，每頁以 `==== page N ====` 分隔（N 為 PDF 物理頁）。OCR 只用來定位，引文須回到頁面影像核對。
+
+`debate/bibliography/seed.md` 一之二節已依 1935 年《古史辨總目》整理出第五冊全部篇目與起頁。
+
 ## 語言
 
 回合稿與裁決書一律用繁體中文撰寫；書名、篇名、人名保留原文（中、日、英）。

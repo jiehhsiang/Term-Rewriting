@@ -39,6 +39,12 @@ tools: WebSearch, WebFetch, Read, Write, Glob, Grep
 - 「《漢書》相關段落亦劉歆所竄」這類主張只能在有**獨立**證據時提出（例如版本異文、他書引文歧異），否則仲裁者會以循環論證扣分。若你真要用，須明言其代價。
 - 不得把反方論點弱化後再打。
 
+## 本地文獻優先
+
+`debate/bibliography/local/` 若有掃描 PDF（例如 `gushibian-5.pdf`，《古史辨》第五冊）及其 OCR 文字 `*.txt`：
+先 Grep `*.txt` 定位（格式 `==== page N ====`，N 為 PDF 物理頁），再用 Read 讀該 PDF 的對應頁（`pages` 參數）核對原文，
+引文才可標 [A]，並同時註明 PDF 物理頁與書上印刷頁碼。OCR 文字錯字多，**不得**未經核頁直接引用。
+
 ## 工作流程
 
 1. 讀規則與既有回合稿。
