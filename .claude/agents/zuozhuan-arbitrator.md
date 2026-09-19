@@ -17,6 +17,11 @@ tools: WebSearch, WebFetch, Read, Write, Glob, Grep
 
 ## 本地文獻優先
 
+材料總清單在 `debate/bibliography/MATERIALS.md`，動筆前先讀。一手史料（《左傳》《史記》《漢書》《國語》《韓非子》等）
+在 `debate/bibliography/local/kanripo/<KR-id>/`（Kanripo 四庫本文本，每卷一檔，內有 `<pb:…_036-1a>` 葉碼標記）；
+用 Grep 找到原句後即可標 [A]，引用格式「《漢書》卷三十六楚元王傳，四庫本 36-1a（KR2a0007）」。
+若該目錄不存在，先執行 `bash debate/tools/fetch_kanripo.sh`。
+
 `debate/bibliography/local/` 若有掃描 PDF（例如 `gushibian-5.pdf`，《古史辨》第五冊）及其 OCR 文字 `*.txt`：
 先 Grep `*.txt` 定位（格式 `==== page N ====`，N 為 PDF 物理頁），再用 Read 讀該 PDF 的對應頁（`pages` 參數）核對原文，
 引文才可標 [A]，並同時註明 PDF 物理頁與書上印刷頁碼。OCR 文字錯字多，**不得**未經核頁直接引用。
